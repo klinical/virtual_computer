@@ -65,5 +65,8 @@ int main(int argc, char *argv[])
     exit(-1);
   }
 
+  fclose(srcfile);
+  fclose(objfile);
+
   exit(0);
 }

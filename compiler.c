@@ -16,6 +16,9 @@ unsigned long int read_num_ops(FILE *srcfile);
 short int read_token(FILE *, token, const char *);
 void free_instr_set(tokenlist **, unsigned long int);
 FILE *open_objfile(const char *srcfilename);
+void build_objfile(FILE *objfile, tokenlist *instructions, unsigned long int);
+void write_opcode(FILE *objfile, const char *instruction, unsigned long int);
+void write_address(FILE *objfile, const char *address, unsigned long int);
 
 FILE *Compile(FILE *const srcfile, const char *srcfilename)
 {
@@ -27,30 +30,120 @@ FILE *Compile(FILE *const srcfile, const char *srcfilename)
   build_instruction_set(srcfile, &instruction_set, num_instructions);
 
   objfile = open_objfile(srcfilename);
+  build_objfile(objfile, instruction_set, num_instructions);
 
   free_instr_set(&instruction_set, num_instructions); /* let's try to avoid a use-after-free */
 
   instruction_set = NULL;
 
   return objfile;
-  /**
-   * For each line, split on white space into a list of three 'tokens'
-   *  . If there are more than three tokens, invalid syntax . exit
-   *  . If there are less than three tokens, invalid syntax . exit
-   *  . if (Num Ops <= COMPUTER_MEM_SIZE) INCREMENT Num Ops else OUT OF MEMORY  . exit
-   * 
-   * For each token list
-   *  . token[0] should be strictly numeric. between 00 AND N , where N = Num Ops
-   *  . token[1] should be strictly characters, at MAX 4 chars wide AND
-   *  . . FROM the following list: 
-   *  . . . READ , WRIT , PRNT . LOAD , STOR , SET . 
-   *  . . . ADD , SUB , DIV , MULT , MOD .
-   *  . . . BRAND , BRNG, BRZR , HALT .
-   *  . token[2] should be strictly numeric.  >= 2 digits wide and in range 0 - COMPUTER_MEM_SIZE
-   *  . . UNLESS token[1] is a SET op. THEN >= 4 digits wide AND 0000 - COMPUTER_MEM_SIZE:COMPUTER_MEM_SIZE
-   *  . Write to objfile ; Token:OpCode|Token:MemLoc
-   *  . Free all dynamically allocated memory as necessary
-   */
+}
+
+void build_objfile(FILE *objfile, tokenlist *instructions, unsigned long int numops)
+{
+  int i, j;
+
+  /* for each entry in the instruction list */
+  for (i = 0; i < (numops - 1); i++)
+  {
+    /* for each token in a token list; skip the instruction id# */
+    for (j = 1; j < 3; j++)
+    {
+      switch (j)
+      {
+      case 1:
+        write_opcode(objfile, instructions[i][j], i);
+        break;
+      case 2:
+        write_address(objfile, instructions[i][j], i);
+        break;
+      default:
+        puts("Error, terminating.");
+        exit(-1);
+      }
+    }
+
+    putc('\n', objfile);
+  }
+}
+
+void write_opcode(FILE *objfile, const char *instruction, unsigned long int line)
+{
+  long int opcode = -1;
+
+  if (strcmp(instruction, "READ") == 0)
+  {
+    opcode = 10;
+  }
+  else if (strcmp(instruction, "WRIT") == 0)
+  {
+    opcode = 11;
+  }
+  else if (strcmp(instruction, "PRNT") == 0)
+  {
+    opcode = 12;
+  }
+  else if (strcmp(instruction, "LOAD") == 0)
+  {
+    opcode = 20;
+  }
+  else if (strcmp(instruction, "STOR") == 0)
+  {
+    opcode = 21;
+  }
+  else if (strcmp(instruction, "SET") == 0)
+  {
+    opcode = 22;
+  }
+  else if (strcmp(instruction, "ADD") == 0)
+  {
+    opcode = 30;
+  }
+  else if (strcmp(instruction, "SUB") == 0)
+  {
+    opcode = 31;
+  }
+  else if (strcmp(instruction, "DIV") == 0)
+  {
+    opcode = 32;
+  }
+  else if (strcmp(instruction, "MULT") == 0)
+  {
+    opcode = 33;
+  }
+  else if (strcmp(instruction, "MOD") == 0)
+  {
+    opcode = 34;
+  }
+  else if (strcmp(instruction, "BRAN") == 0)
+  {
+    opcode = 40;
+  }
+  else if (strcmp(instruction, "BRNG") == 0)
+  {
+    opcode = 41;
+  }
+  else if (strcmp(instruction, "BRZR") == 0)
+  {
+    opcode = 42;
+  }
+  else if (strcmp(instruction, "HALT") == 0)
+  {
+    opcode = 99;
+  }
+
+  if (opcode == -1)
+  {
+    printf("Unknown instruction \"%s\" on line %lu. Terminating.\n", instruction, line);
+    exit(-1);
+  }
+
+  fprintf(objfile, "%lu", opcode);
+}
+
+void write_address(FILE *objfile, const char *address, unsigned long int line)
+{
+  fprintf(objfile, "%s", address);
 }
 
 FILE *open_objfile(const char *srcfilename)
@@ -123,7 +216,7 @@ unsigned long int read_num_ops(FILE *srcfile)
  * */
 unsigned long build_instruction_set(FILE *srcfile, tokenlist **instr_set, unsigned long int opcount)
 {
-  short int t_num, i, status; /* the current token number */
+  short int i, status; /* the current token number */
   unsigned long int iter;
   token ctoken; /* for storing the current token */
   tokenlist *new_instr_set;
@@ -137,13 +230,11 @@ unsigned long build_instruction_set(FILE *srcfile, tokenlist **instr_set, unsign
 
   for (iter = 0; iter < (opcount - 1); iter++)
   {
-    t_num = 0;
-
-    for (i = 0; i < 3; i++) /* Go 1 past max num tokens to check if a line is invalid */
+    for (i = 0; i < 3; i++)
     {
       ctoken = (token)malloc(sizeof(char) * MAX_ADDRESS_LEN);
 
-      switch (t_num)
+      switch (i)
       {
       case 0:
         if (read_token(srcfile, ctoken, "identifier") == -1)
@@ -174,9 +265,7 @@ unsigned long build_instruction_set(FILE *srcfile, tokenlist **instr_set, unsign
         break;
       }
 
-      new_instr_set[iter][t_num] = ctoken;
-
-      t_num++;
+      new_instr_set[iter][i] = ctoken;
     }
   }
 
@@ -186,7 +275,7 @@ unsigned long build_instruction_set(FILE *srcfile, tokenlist **instr_set, unsign
 }
 
 /**
- * Reads a token based on type, return 0 if all good, -1 if failure.
+ * Reads a token based on type, return 0 if all good, -1 if failure, 1 if token precedes newline.
  * */
 short int read_token(FILE *srcfile, token tkn, const char *t_type)
 {
@@ -229,6 +318,17 @@ short int read_token(FILE *srcfile, token tkn, const char *t_type)
   if (ch == '\n')
   {
     ok = 1; /* signifies that we have read a newline, end of a token set */
+  }
+  else if (ch == ' ')
+  {
+    /* 
+      ignore whitespace until reaching the next character
+      and then rewind 
+    */
+    while ((ch = getc(srcfile)) == ' ')
+      ;
+
+    fseek(srcfile, -1, SEEK_CUR);
   }
 
   return ok;
